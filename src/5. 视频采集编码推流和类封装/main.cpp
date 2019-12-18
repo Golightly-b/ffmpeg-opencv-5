@@ -89,6 +89,10 @@ int main(int argc, char *argv[])
 		}
 		cout << "avcodec_open2 success!" << endl;
 
+		AVPacket pack;
+		memset(&pack, 0, sizeof(pack));
+		int vpts = 0;
+
 		for (;;)
 		{
 			///¶ÁÈ¡ÊÓÆµÖ¡£¬½âÂëÊÓÆµÖ¡
@@ -109,7 +113,13 @@ int main(int argc, char *argv[])
 			if (h <= 0) continue;
 			//cout << h << "" << flush;
 
-
+			///h264±àÂë
+			yuv->pts = vpts;
+			vpts++;
+			ret = avcodec_send_frame(vc, yuv);
+			if (ret != 0)continue;
+			ret = avcodec_receive_packet(vc, &pack);
+			 cout << "*" << pack.size << flush;
 		}
 	}
 	catch (exception&ex)
