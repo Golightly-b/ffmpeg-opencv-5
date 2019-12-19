@@ -15,7 +15,7 @@ using namespace cv;
 int main(int argc, char *argv[])
 {
 	//char *inUrl = "rtsp://test:test123456@192.168.1.64";//海康相机的rtsp url
-	char *outnUrl = "rtmp://192.168.1.6/live";//直播服务器（nginx-rtmp）的rtmp
+	char *outnUrl = "rtmp://192.168.1.111/live";//直播服务器（nginx-rtmp）的rtmp
 	VideoCapture cam;
 	Mat frame;
 	namedWindow("video");
@@ -110,9 +110,27 @@ int main(int argc, char *argv[])
 		avcodec_parameters_from_context(vs->codecpar, vc);
 		av_dump_format(ic, 0, outnUrl, 1);
 
+		///6.打开rtmp的网络输出IO
+		ret = avio_open(&ic->pb, outnUrl,AVIO_FLAG_WRITE);
+		if (ret != 0)
+		{
+			char buf[1024] = { 0 };
+			av_strerror(ret, buf, sizeof(buf) - 1);
+			throw exception(buf);
+		}
+		//写入封装头
+		ret = avformat_write_header(ic, NULL);
+		if (ret != 0)
+		{
+			char buf[1024] = { 0 };
+			av_strerror(ret, buf, sizeof(buf) - 1);
+			throw exception(buf);
+		}
+
 		AVPacket pack;
 		memset(&pack, 0, sizeof(pack));
 		int vpts = 0;
+		
 
 		for (;;)
 		{
@@ -140,7 +158,13 @@ int main(int argc, char *argv[])
 			ret = avcodec_send_frame(vc, yuv);
 			if (ret != 0)continue;
 			ret = avcodec_receive_packet(vc, &pack);
-			 cout << "*" << pack.size << flush;
+			//cout << "*" << pack.size << flush;
+
+			pack.pts = av_rescale_q(pack.pts, vc->time_base, vs->time_base);
+			pack.dts = av_rescale_q(pack.dts, vc->time_base, vs->time_base);
+			ret = av_interleaved_write_frame(ic, &pack);
+			if (ret == 0) cout << "#" << flush;
+
 		}
 	}
 	catch (exception&ex)
@@ -153,6 +177,7 @@ int main(int argc, char *argv[])
 		}
 		if (vc)
 		{
+			avio_closep(&ic->pb);
 			avcodec_free_context(&vc);
 		}
 		cerr << ex.what() << endl;
