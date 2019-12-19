@@ -3,11 +3,13 @@
 extern "C"{
 #include <libswscale/swscale.h>
 #include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
 }
 #pragma comment(lib, "swscale.lib")
 #pragma comment(lib,"opencv_world320d.lib")
 #pragma comment(lib,"avcodec.lib")
 #pragma comment(lib,"avutil.lib")
+#pragma comment(lib,"avformat.lib")
 using namespace std;
 using namespace cv;
 int main(int argc, char *argv[])
@@ -20,9 +22,11 @@ int main(int argc, char *argv[])
 	SwsContext *vsc = NULL;//像素格式转换上下文
 	AVFrame *yuv = NULL;//输出的数据结构
 	AVCodecContext *vc = NULL;//编码器上下文
+	AVFormatContext *ic = NULL;//rtmp flv 封装器
 	
 	avcodec_register_all();//注册所有的编解码器
-
+	av_register_all();//注册所有的封装器
+	avformat_network_init();//注册所有网络协议
 	////////////////////////////////////////////////////////////////
 	try
 	{		
@@ -88,6 +92,23 @@ int main(int argc, char *argv[])
 			throw exception(buf);
 		}
 		cout << "avcodec_open2 success!" << endl;
+
+		///5.输出封装器和视频流配置
+		//a.创建封装器上下文
+		ret = avformat_alloc_output_context2(&ic, 0, "flv", outnUrl);
+		if (ret != 0)
+		{
+			char buf[1024] = { 0 };
+			av_strerror(ret, buf, sizeof(buf) - 1);
+			throw exception(buf);
+		}
+		//b.添加视频流
+		AVStream *vs = avformat_new_stream(ic, NULL);
+		if (!vs) throw exception("avformat_new_stream failed");
+		vs->codecpar->codec_tag = 0;
+		//从编码器复制参数
+		avcodec_parameters_from_context(vs->codecpar, vc);
+		av_dump_format(ic, 0, outnUrl, 1);
 
 		AVPacket pack;
 		memset(&pack, 0, sizeof(pack));
